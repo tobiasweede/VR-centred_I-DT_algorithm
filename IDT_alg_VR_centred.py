@@ -10,12 +10,17 @@ import sys
 
 
 class IDTVR:
-    def __init__(self,
-                 time_th=0.25, disp_th=1, freq_th=30, numba_allow=True):
+    def __init__(
+        self,
+        time_th=0.25,
+        disp_th=1,
+        na_threshold=12,  # allow 2 full NA rows
+        numba_allow=True,
+    ):
         self.time_th = time_th
         self.disp_th = disp_th
         self.numba_allow = numba_allow
-        self.freq_th = freq_th
+        self.na_threshold = na_threshold
 
         self.class_disp = None
 
@@ -25,12 +30,18 @@ class IDTVR:
     # ### The inputs et_(x,y,z) are coordinates of the gaze in x,y,z.
     # ### The inputs head_pos_(x,y,x) are the coordinates for the head position in x,y,z.
 
-    def fit_compute(self,
-                    data,
-                    time="time",
-                    et_x="et_x", et_y="et_y", et_z="et_z",
-                    head_pos_x="head_pose_x", head_pos_y="head_pose_y", head_pos_z="head_pose_z",
-                    debug=False):
+    def fit_compute(
+        self,
+        data,
+        time="time",
+        et_x="et_x",
+        et_y="et_y",
+        et_z="et_z",
+        head_pos_x="head_pose_x",
+        head_pos_y="head_pose_y",
+        head_pos_z="head_pose_z",
+        debug=False,
+    ):
         data = data.reset_index(drop=True)
         data["class_disp"] = ["?"] * data.shape[0]
         initial_idx = data.index.values[0]
@@ -38,11 +49,11 @@ class IDTVR:
 
         while True:
             try:
-                data.iloc[initial_idx]
+                data.loc[initial_idx]
             except:
                 break
 
-            init_time = data[time].iloc[initial_idx]
+            init_time = data[time].loc[initial_idx]
             fin_time = self.time_th + init_time
             end_idx = np.argsort(np.abs(data[time].values - fin_time))[0]
 
@@ -53,23 +64,28 @@ class IDTVR:
             if debug:
                 IDTVR.my_progressbar_show(j - 1, final_idx)
 
-            sub_data = data.iloc[initial_idx:(end_idx + 1)]
+            sub_data = data.loc[initial_idx : (end_idx + 1)]
 
-            freq_list = [1 / (sub_data[time].iloc[i] - sub_data[time].iloc[i - 1]) for i in range(1, sub_data.shape[0])]
-
-            if np.sum(np.array(freq_list) < self.freq_th) == 0:
+            # sum over na values in all cols
+            if sub_data["et_x"].isna().sum().sum() < self.na_threshold:
 
                 head_mean_pos_x = np.nanmean(sub_data[head_pos_x])
                 head_mean_pos_y = np.nanmean(sub_data[head_pos_y])
                 head_mean_pos_z = np.nanmean(sub_data[head_pos_z])
 
-                output = list(map(self.compute_disp_angle,
-                                  zip([[head_mean_pos_z] * sub_data.shape[0]],
-                                      [[head_mean_pos_x] * sub_data.shape[0]],
-                                      [[head_mean_pos_y] * sub_data.shape[0]],
-                                      [sub_data[et_z].values],
-                                      [sub_data[et_y].values],
-                                      [sub_data[et_x].values])))
+                output = list(
+                    map(
+                        self.compute_disp_angle,
+                        zip(
+                            [[head_mean_pos_z] * sub_data.shape[0]],
+                            [[head_mean_pos_x] * sub_data.shape[0]],
+                            [[head_mean_pos_y] * sub_data.shape[0]],
+                            [sub_data[et_z].values],
+                            [sub_data[et_y].values],
+                            [sub_data[et_x].values],
+                        ),
+                    )
+                )
 
                 list_thetas, msg = output[0]
 
@@ -82,44 +98,48 @@ class IDTVR:
                         if debug:
                             IDTVR.my_progressbar_show(j - 1, final_idx)
 
-                        sub_data = data.iloc[initial_idx:(end_idx + 1)]
+                        sub_data = data.loc[initial_idx : (end_idx + 1)]
 
                         head_mean_pos_x = np.nanmean(sub_data[head_pos_x])
                         head_mean_pos_y = np.nanmean(sub_data[head_pos_y])
                         head_mean_pos_z = np.nanmean(sub_data[head_pos_z])
 
-                        t_diff_array = sub_data[time].iloc[1:].values - sub_data[time].iloc[:-1].values
-                        freq_list = 1 / t_diff_array
-
-                        if np.sum(freq_list < self.freq_th) == 0:
-                            output = list(map(self.compute_disp_angle,
-                                              zip([[head_mean_pos_z] * sub_data.shape[0]],
-                                                  [[head_mean_pos_x] * sub_data.shape[0]],
-                                                  [[head_mean_pos_y] * sub_data.shape[0]],
-                                                  [sub_data[et_z].values],
-                                                  [sub_data[et_y].values],
-                                                  [sub_data[et_x].values])))
+                        # sum over na values in all cols
+                        if sub_data.isna().sum().sum() < self.na_threshold:
+                            output = list(
+                                map(
+                                    self.compute_disp_angle,
+                                    zip(
+                                        [[head_mean_pos_z] * sub_data.shape[0]],
+                                        [[head_mean_pos_x] * sub_data.shape[0]],
+                                        [[head_mean_pos_y] * sub_data.shape[0]],
+                                        [sub_data[et_z].values],
+                                        [sub_data[et_y].values],
+                                        [sub_data[et_x].values],
+                                    ),
+                                )
+                            )
 
                             list_thetas, msg = output[0]
                             if msg == "found" or j >= final_idx:
-                                data["class_disp"].iloc[initial_idx:end_idx] = 0
-                                data["class_disp"].iloc[end_idx] = 1
+                                data.loc[initial_idx:end_idx, "class_disp"] = 0
+                                data.loc[end_idx, "class_disp"] = 1
 
                                 initial_idx = end_idx + 1
 
                                 break
                         else:
-                            data["class_disp"].iloc[initial_idx:end_idx] = 0
-                            data["class_disp"].iloc[end_idx] = 1
+                            data.loc[initial_idx:end_idx, "class_disp"] = 0
+                            data.loc[end_idx, "class_disp"] = 1
 
                             initial_idx = end_idx + 1
 
                             break
                 else:
-                    data["class_disp"].iloc[initial_idx] = 1
+                    data.loc[initial_idx, "class_disp"] = 1
                     initial_idx += 1
             else:
-                data["class_disp"].iloc[initial_idx] = 1
+                data.loc[initial_idx, "class_disp"] = 1
                 initial_idx += 1
 
         self.class_disp = data["class_disp"]
@@ -157,10 +177,19 @@ class IDTVR:
         for i in iteration:
             dist_x_i, dist_y_i, dist_z_i = all_x[i], all_y[i], all_z[i]
 
-            diagonal = list(map(
-                lambda j: IDTVR.scalar_product(dist_x_i, all_x[j], dist_y_i, all_y[j], dist_z_i, all_z[j]),
-                np.arange(i)
-            ))
+            diagonal = list(
+                map(
+                    lambda j: IDTVR.scalar_product(
+                        dist_x_i,
+                        all_x[j],
+                        dist_y_i,
+                        all_y[j],
+                        dist_z_i,
+                        all_z[j],
+                    ),
+                    np.arange(i),
+                )
+            )
 
             result_list += list(np.arccos(np.abs(diagonal)) * (180 / np.pi))
 
@@ -171,7 +200,14 @@ class IDTVR:
         return result_list, msg
 
     def compute_disp_angle(self, zip_obj):
-        mean_vertex_x, mean_vertex_y, mean_vertex_z, et_x_col, et_y_col, et_z_col = zip_obj
+        (
+            mean_vertex_x,
+            mean_vertex_y,
+            mean_vertex_z,
+            et_x_col,
+            et_y_col,
+            et_z_col,
+        ) = zip_obj
 
         mean_vertex_x = mean_vertex_x[0]
         mean_vertex_y = mean_vertex_y[0]
@@ -182,7 +218,9 @@ class IDTVR:
         all_z = np.array(et_z_col) - mean_vertex_z
 
         if self.numba_allow:
-            result_list, msg = self.get_result_numba(all_x, all_y, all_z, disp_th=self.disp_th)
+            result_list, msg = self.get_result_numba(
+                all_x, all_y, all_z, disp_th=self.disp_th
+            )
         else:
             result_list, msg = self.get_result_normal(all_x, all_y, all_z)
 
@@ -192,8 +230,8 @@ class IDTVR:
     @staticmethod
     def scalar_product(x1, x2, y1, y2, z1, z2):
         num = x1 * x2 + y1 * y2 + z1 * z2
-        den1 = np.sqrt(x1 ** 2 + y1 ** 2 + z1 ** 2)
-        den2 = np.sqrt(x2 ** 2 + y2 ** 2 + z2 ** 2)
+        den1 = np.sqrt(x1**2 + y1**2 + z1**2)
+        den2 = np.sqrt(x2**2 + y2**2 + z2**2)
 
         return np.abs(num) / (den1 * den2)
 
