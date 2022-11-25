@@ -4,8 +4,9 @@
 # ###########################################
 # ###########################################
 
-import numpy as np
 import numba as nb
+import numpy as np
+import pandas as pd
 import sys
 
 
@@ -16,11 +17,15 @@ class IDTVR:
         disp_th=1,
         na_threshold=12,  # allow 2 full NA rows
         numba_allow=True,
+        filter_duration_th=0.1,
+        combine_time_th=0.2,
     ):
         self.time_th = time_th
         self.disp_th = disp_th
         self.numba_allow = numba_allow
         self.na_threshold = na_threshold
+        self.filter_duration_th = filter_duration_th
+        self.combine_time_th = combine_time_th
 
         self.class_disp = None
 
@@ -144,7 +149,87 @@ class IDTVR:
 
         self.class_disp = data["class_disp"]
 
-        return data
+        # create fixations
+        data["gaze_event_changed"] = data["class_disp"] != data[
+            "class_disp"
+        ].shift(1)
+        data["gaze_event_number"] = data["gaze_event_changed"].cumsum()
+
+        data_idt_fixations = pd.DataFrame()
+        if data[data["class_disp"] == 0].shape[0] > 0:
+            data_idt_fixations = (
+                data[data["class_disp"] == 0]
+                .groupby(["gaze_event_number"])
+                .agg(
+                    {
+                        time: lambda x: list(x)[0],
+                        'bino_hitObject': IDTVR.find_most_frequent_element,
+                    }
+                )
+            )
+
+            data_idt_fixations.rename(
+                columns={"time_delta": "duration"}, inplace=True
+            )
+
+            data_idt_fixations.reset_index(drop=True)
+
+            #
+            # combine fixations
+            #
+            # idx = 0
+            # while idx < data_idt_fixations.shape[0] - 2:
+            #     # check criteria for combining fixations
+            #     delta_time = (
+            #         data_idt_fixations.iloc[idx + 1]["trial_time"]
+            #         - data_idt_fixations.iloc[idx]["trial_time"]
+            #         - data_idt_fixations.iloc[idx]["duration"]
+            #     )
+            #     if delta_time > self.combine_time_th:
+            #         idx += 1
+            #         continue
+            #     delta_x = (
+            #         data_idt_fixations.iloc[idx]["POR X"]
+            #         - data_idt_fixations.iloc[idx + 1]["POR X"]
+            #     )
+            #     delta_y = (
+            #         data_idt_fixations.iloc[idx]["POR Y"]
+            #         - data_idt_fixations.iloc[idx + 1]["POR Y"]
+            #     )
+            #     if delta_x > combine_disp_th * 2 or delta_y > combine_disp_th:
+            #         idx += 1
+            #         continue
+            #     # merge fixations
+            #     data_idt_fixations.iloc[
+            #         idx, data_idt_fixations.columns.get_loc("POR X")
+            #     ] = (
+            #         data_idt_fixations.iloc[idx]["POR X"]
+            #         + data_idt_fixations.iloc[idx + 1]["POR X"]
+            #     ) / 2
+            #     data_idt_fixations.iloc[
+            #         idx, data_idt_fixations.columns.get_loc("POR Y")
+            #     ] = (
+            #         data_idt_fixations.iloc[idx]["POR Y"]
+            #         + data_idt_fixations.iloc[idx + 1]["POR Y"]
+            #     ) / 2
+            #     data_idt_fixations.iloc[
+            #         idx, data_idt_fixations.columns.get_loc("duration")
+            #     ] = (
+            #         data_idt_fixations.iloc[idx + 1]["trial_time"]
+            #         - data_idt_fixations.iloc[idx]["trial_time"]
+            #         + data_idt_fixations.iloc[idx + 1]["duration"]
+            #     )
+            #     data_idt_fixations.drop(
+            #         index=data_idt_fixations.iloc[idx + 1].name, inplace=True
+            #     )
+
+            # finally delete fixations with too short duration
+            data_idt_fixations = data_idt_fixations[
+                data_idt_fixations["duration"] > self.filter_duration_th
+            ]
+
+        return data, data_idt_fixations
+        # return data
 
     @staticmethod
     @nb.jit(nopython=True)
@@ -226,18 +311,25 @@ class IDTVR:
 
         return result_list, msg
 
-    # ### Definition of the normalized scalar product in three dimensions.
     @staticmethod
     def scalar_product(x1, x2, y1, y2, z1, z2):
+        """Definition of the normalized scalar product in three dimensions."""
         num = x1 * x2 + y1 * y2 + z1 * z2
         den1 = np.sqrt(x1**2 + y1**2 + z1**2)
         den2 = np.sqrt(x2**2 + y2**2 + z2**2)
 
         return np.abs(num) / (den1 * den2)
 
-    # ### Definition of the progressbar to check that the algorithm is working.
     @staticmethod
     def my_progressbar_show(j, count, prefix="", size=80, file=sys.stdout):
+        """Progressbar to check that the algorithm is working."""
         x = int(size * j / count)
         file.write("%s[%s%s] %i/%i\r" % (prefix, "#" * x, "." * (size - x), j, count))
         file.flush()
+
+    @staticmethod
+    def find_most_frequent_element(x):
+        """Find most frequent element in a list.
+        Used to determine hitObject for fixations. 
+        """
+        return pd.Series(x).value_counts().index[0]
