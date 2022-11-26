@@ -29,12 +29,6 @@ class IDTVR:
 
         self.class_disp = None
 
-    # ### This function is the implementation of the I-DT algorithm in VR-centred system.
-    # ### The used thresholds are 0.25s for the time window and 1 degree for the dispersion threshold.
-    # ### The input of the function time selects the column with the time variable.
-    # ### The inputs et_(x,y,z) are coordinates of the gaze in x,y,z.
-    # ### The inputs head_pos_(x,y,x) are the coordinates for the head position in x,y,z.
-
     def fit_compute(
         self,
         data,
@@ -47,6 +41,11 @@ class IDTVR:
         head_pos_z="head_pose_z",
         debug=False,
     ):
+        """This function is the implementation of the I-DT algorithm in VR-centred system.
+        Default thresholds are 0.25s for the time window and 1 degree for the dispersion threshold.
+        The input of the function time selects the column with the time variable.
+        The inputs et_(x,y,z) are coordinates of the gaze in x,y,z.
+        The inputs head_pos_(x,y,x) are the coordinates for the head position in x,y,z."""
         data = data.reset_index(drop=True)
         data["class_disp"] = ["?"] * data.shape[0]
         initial_idx = data.index.values[0]
@@ -164,6 +163,7 @@ class IDTVR:
                     {
                         time: lambda x: list(x)[0],
                         'bino_hitObject': IDTVR.find_most_frequent_element,
+                        "time_delta": sum,
                     }
                 )
             )
@@ -332,4 +332,7 @@ class IDTVR:
         """Find most frequent element in a list.
         Used to determine hitObject for fixations. 
         """
-        return pd.Series(x).value_counts().index[0]
+        try:
+            return pd.Series(x).value_counts().index[0]
+        except IndexError: # if all values are NaN
+            return ""
