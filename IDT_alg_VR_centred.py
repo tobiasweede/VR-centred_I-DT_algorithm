@@ -1,9 +1,4 @@
-# ###########################################
-# ###########################################
-# ### I-DT algorithm in VR-centred system ###
-# ###########################################
-# ###########################################
-
+# I-DT algorithm in VR-centred system
 import numba as nb
 import numpy as np
 import pandas as pd
@@ -19,6 +14,7 @@ class IDTVR:
         numba_allow=True,
         filter_duration_th=0.1,
         combine_time_th=0.2,
+        combine_disp_th=50,  # euclidean dist.
     ):
         self.time_th = time_th
         self.disp_th = disp_th
@@ -26,6 +22,7 @@ class IDTVR:
         self.na_threshold = na_threshold
         self.filter_duration_th = filter_duration_th
         self.combine_time_th = combine_time_th
+        self.combine_disp_th = combine_disp_th
 
         self.class_disp = None
 
@@ -114,9 +111,18 @@ class IDTVR:
                                 map(
                                     self.compute_disp_angle,
                                     zip(
-                                        [[head_mean_pos_z] * sub_data.shape[0]],
-                                        [[head_mean_pos_x] * sub_data.shape[0]],
-                                        [[head_mean_pos_y] * sub_data.shape[0]],
+                                        [
+                                            [head_mean_pos_z]
+                                            * sub_data.shape[0]
+                                        ],
+                                        [
+                                            [head_mean_pos_x]
+                                            * sub_data.shape[0]
+                                        ],
+                                        [
+                                            [head_mean_pos_y]
+                                            * sub_data.shape[0]
+                                        ],
                                         [sub_data[et_z].values],
                                         [sub_data[et_y].values],
                                         [sub_data[et_x].values],
@@ -162,8 +168,10 @@ class IDTVR:
                 .agg(
                     {
                         time: lambda x: list(x)[0],
-                        'bino_hitObject': IDTVR.find_most_frequent_element,
+                        "bino_hitObject": IDTVR.find_most_frequent_element,
                         "time_delta": sum,
+                        "POR X": np.nanmean,
+                        "POR Y": np.nanmean,
                     }
                 )
             )
@@ -177,59 +185,61 @@ class IDTVR:
             #
             # combine fixations
             #
-            # idx = 0
-            # while idx < data_idt_fixations.shape[0] - 2:
-            #     # check criteria for combining fixations
-            #     delta_time = (
-            #         data_idt_fixations.iloc[idx + 1]["trial_time"]
-            #         - data_idt_fixations.iloc[idx]["trial_time"]
-            #         - data_idt_fixations.iloc[idx]["duration"]
-            #     )
-            #     if delta_time > self.combine_time_th:
-            #         idx += 1
-            #         continue
-            #     delta_x = (
-            #         data_idt_fixations.iloc[idx]["POR X"]
-            #         - data_idt_fixations.iloc[idx + 1]["POR X"]
-            #     )
-            #     delta_y = (
-            #         data_idt_fixations.iloc[idx]["POR Y"]
-            #         - data_idt_fixations.iloc[idx + 1]["POR Y"]
-            #     )
-            #     if delta_x > combine_disp_th * 2 or delta_y > combine_disp_th:
-            #         idx += 1
-            #         continue
-            #     # merge fixations
-            #     data_idt_fixations.iloc[
-            #         idx, data_idt_fixations.columns.get_loc("POR X")
-            #     ] = (
-            #         data_idt_fixations.iloc[idx]["POR X"]
-            #         + data_idt_fixations.iloc[idx + 1]["POR X"]
-            #     ) / 2
-            #     data_idt_fixations.iloc[
-            #         idx, data_idt_fixations.columns.get_loc("POR Y")
-            #     ] = (
-            #         data_idt_fixations.iloc[idx]["POR Y"]
-            #         + data_idt_fixations.iloc[idx + 1]["POR Y"]
-            #     ) / 2
-            #     data_idt_fixations.iloc[
-            #         idx, data_idt_fixations.columns.get_loc("duration")
-            #     ] = (
-            #         data_idt_fixations.iloc[idx + 1]["trial_time"]
-            #         - data_idt_fixations.iloc[idx]["trial_time"]
-            #         + data_idt_fixations.iloc[idx + 1]["duration"]
-            #     )
-            #     data_idt_fixations.drop(
-            #         index=data_idt_fixations.iloc[idx + 1].name, inplace=True
-            #     )
+            idx = 0
+            while idx < data_idt_fixations.shape[0] - 2:
+                # check criteria for combining fixations
+                delta_time = (
+                    data_idt_fixations.iloc[idx + 1][time]
+                    - data_idt_fixations.iloc[idx][time]
+                    - data_idt_fixations.iloc[idx]["duration"]
+                )
+                delta_x = (
+                    data_idt_fixations.iloc[idx]["POR X"]
+                    - data_idt_fixations.iloc[idx + 1]["POR X"]
+                )
+                delta_y = (
+                    data_idt_fixations.iloc[idx]["POR Y"]
+                    - data_idt_fixations.iloc[idx + 1]["POR Y"]
+                )
+                if (
+                    delta_time > self.combine_time_th
+                    or (delta_x * delta_x + delta_y * delta_y) ** (1 / 2)
+                    > self.combine_disp_th
+                    or data_idt_fixations.iloc[idx]["bino_hitObject"]
+                    != data_idt_fixations.iloc[idx + 1]["bino_hitObject"]
+                ):
+                    idx += 1
+                    continue
+                # merge fixations
+                data_idt_fixations.iloc[
+                    idx, data_idt_fixations.columns.get_loc("POR X")
+                ] = (
+                    data_idt_fixations.iloc[idx]["POR X"]
+                    + data_idt_fixations.iloc[idx + 1]["POR X"]
+                ) / 2
+                data_idt_fixations.iloc[
+                    idx, data_idt_fixations.columns.get_loc("POR Y")
+                ] = (
+                    data_idt_fixations.iloc[idx]["POR Y"]
+                    + data_idt_fixations.iloc[idx + 1]["POR Y"]
+                ) / 2
+                data_idt_fixations.iloc[
+                    idx, data_idt_fixations.columns.get_loc("duration")
+                ] = (
+                    data_idt_fixations.iloc[idx + 1][time]
+                    - data_idt_fixations.iloc[idx][time]
+                    + data_idt_fixations.iloc[idx + 1]["duration"]
+                )
+                data_idt_fixations.drop(
+                    index=data_idt_fixations.iloc[idx + 1].name, inplace=True
+                )
 
-            # finally delete fixations with too short duration
+            # delete fixations with too short duration
             data_idt_fixations = data_idt_fixations[
                 data_idt_fixations["duration"] > self.filter_duration_th
             ]
 
         return data, data_idt_fixations
-        # return data
 
     @staticmethod
     @nb.jit(nopython=True)
@@ -238,7 +248,11 @@ class IDTVR:
         result_list = []
         for i in range(all_x.shape[0] - 1, 1 - 1, -1):
             for j in range(0, i):
-                num = all_x[i] * all_x[j] + all_y[i] * all_y[j] + all_z[i] * all_z[j]
+                num = (
+                    all_x[i] * all_x[j]
+                    + all_y[i] * all_y[j]
+                    + all_z[i] * all_z[j]
+                )
                 den1 = np.sqrt(all_x[i] ** 2 + all_y[i] ** 2 + all_z[i] ** 2)
                 den2 = np.sqrt(all_x[j] ** 2 + all_y[j] ** 2 + all_z[j] ** 2)
 
@@ -324,15 +338,17 @@ class IDTVR:
     def my_progressbar_show(j, count, prefix="", size=80, file=sys.stdout):
         """Progressbar to check that the algorithm is working."""
         x = int(size * j / count)
-        file.write("%s[%s%s] %i/%i\r" % (prefix, "#" * x, "." * (size - x), j, count))
+        file.write(
+            "%s[%s%s] %i/%i\r" % (prefix, "#" * x, "." * (size - x), j, count)
+        )
         file.flush()
 
     @staticmethod
     def find_most_frequent_element(x):
         """Find most frequent element in a list.
-        Used to determine hitObject for fixations. 
+        Used to determine hitObject for fixations.
         """
         try:
             return pd.Series(x).value_counts().index[0]
-        except IndexError: # if all values are NaN
+        except IndexError:  # if all values are NaN
             return ""
