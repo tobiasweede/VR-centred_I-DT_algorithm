@@ -16,6 +16,7 @@ def create_fixations(gazelog: Path, save_dir="./fixations"):
         skiprows=15,
         sep=";",
         encoding="utf-8",
+        low_memory=False,
     )
 
     # head pose
@@ -67,7 +68,7 @@ def create_fixations(gazelog: Path, save_dir="./fixations"):
     )
 
     # write fixation csv
-    subject = gazelog.name[:4]
+    subject = gazelog.name.split("_")[0]
     write_path = Path(save_dir + "/" + subject + "_idt_fixations.csv")
     df_et_fixations.to_csv(write_path)
 
