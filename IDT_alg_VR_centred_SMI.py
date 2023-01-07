@@ -36,6 +36,10 @@ class IDTVR:
         head_pos_x="head_pose_x",
         head_pos_y="head_pose_y",
         head_pos_z="head_pose_z",
+        hit_object="bino_hitObject",
+        time_delta="time_delta",
+        por_x="POR X",
+        por_y="POR Y",
         debug=False,
     ):
         """This function is the implementation of the I-DT algorithm in VR-centred system.
@@ -168,16 +172,16 @@ class IDTVR:
                 .agg(
                     {
                         time: lambda x: list(x)[0],
-                        "bino_hitObject": IDTVR.find_most_frequent_element,
-                        "time_delta": sum,
-                        "POR X": np.nanmean,
-                        "POR Y": np.nanmean,
+                        hit_object: IDTVR.find_most_frequent_element,
+                        time_delta: sum,
+                        por_x: np.nanmean,
+                        por_y: np.nanmean,
                     }
                 )
             )
 
             data_idt_fixations.rename(
-                columns={"time_delta": "duration"}, inplace=True
+                columns={time_delta: "duration"}, inplace=True
             )
 
             data_idt_fixations.reset_index(drop=True)
@@ -194,34 +198,34 @@ class IDTVR:
                     - data_idt_fixations.iloc[idx]["duration"]
                 )
                 delta_x = (
-                    data_idt_fixations.iloc[idx]["POR X"]
-                    - data_idt_fixations.iloc[idx + 1]["POR X"]
+                    data_idt_fixations.iloc[idx][por_x]
+                    - data_idt_fixations.iloc[idx + 1][por_x]
                 )
                 delta_y = (
-                    data_idt_fixations.iloc[idx]["POR Y"]
-                    - data_idt_fixations.iloc[idx + 1]["POR Y"]
+                    data_idt_fixations.iloc[idx][por_y]
+                    - data_idt_fixations.iloc[idx + 1][por_y]
                 )
                 if (
                     delta_time > self.combine_time_th
                     or (delta_x * delta_x + delta_y * delta_y) ** (1 / 2)
                     > self.combine_disp_th
-                    or data_idt_fixations.iloc[idx]["bino_hitObject"]
-                    != data_idt_fixations.iloc[idx + 1]["bino_hitObject"]
+                    or data_idt_fixations.iloc[idx][hit_object]
+                    != data_idt_fixations.iloc[idx + 1][hit_object]
                 ):
                     idx += 1
                     continue
                 # merge fixations
                 data_idt_fixations.iloc[
-                    idx, data_idt_fixations.columns.get_loc("POR X")
+                    idx, data_idt_fixations.columns.get_loc(por_x)
                 ] = (
-                    data_idt_fixations.iloc[idx]["POR X"]
-                    + data_idt_fixations.iloc[idx + 1]["POR X"]
+                    data_idt_fixations.iloc[idx][por_x]
+                    + data_idt_fixations.iloc[idx + 1][por_x]
                 ) / 2
                 data_idt_fixations.iloc[
-                    idx, data_idt_fixations.columns.get_loc("POR Y")
+                    idx, data_idt_fixations.columns.get_loc(por_y)
                 ] = (
-                    data_idt_fixations.iloc[idx]["POR Y"]
-                    + data_idt_fixations.iloc[idx + 1]["POR Y"]
+                    data_idt_fixations.iloc[idx][por_y]
+                    + data_idt_fixations.iloc[idx + 1][por_y]
                 ) / 2
                 data_idt_fixations.iloc[
                     idx, data_idt_fixations.columns.get_loc("duration")

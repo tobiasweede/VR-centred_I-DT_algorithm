@@ -1,6 +1,6 @@
 import pandas as pd
 
-from IDT_alg_VR_centred import IDTVR
+from IDT_alg_VR_centred_SMI import IDTVR
 
 df_et = pd.read_csv("Data/eyetracking.txt", sep=";")
 

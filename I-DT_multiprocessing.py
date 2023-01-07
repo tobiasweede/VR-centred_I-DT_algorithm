@@ -1,5 +1,5 @@
 # I-DT multiprocessing
-from IDT_alg_VR_centred import IDTVR
+from IDT_alg_VR_centred_SMI import IDTVR
 from pathlib import Path
 import multiprocessing
 import pandas as pd
