@@ -1,4 +1,8 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
 # I-DT multiprocessing
+from typing import Type
 from IDT_alg_VR_centred_SMI import IDTVR
 from pathlib import Path
 import multiprocessing
@@ -36,7 +40,10 @@ def create_fixations(gazelog: Path, save_dir="./fixations"):
 
     # fix timestamp
     firstTimestamp = df_et.loc[0, "#timestamp_unity"]
-    df_et["elapsedTime"] = df_et["#timestamp_unity"] - firstTimestamp
+    if isinstance(firstTimestamp, float):
+        df_et["elapsedTime"] = df_et["#timestamp_unity"] - firstTimestamp
+    else:
+        raise(TypeError("Wrong firstTimestamp type"))
 
     # keep relevant cols
     df_et = df_et[
